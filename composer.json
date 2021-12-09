@@ -1,0 +1,22 @@
+{
+    "name": "mabbriki/simple-captcha-php",
+    "description": "A simple captcha builder for php",
+    "type": "library",
+    "license": "MIT License",
+    "autoload": {
+        "psr-4": {
+            "MAbbariki\\SimpleCaptchaPhp\\": "src/SimpleCaptchaPhp/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Mahdi Abbariki",
+            "email": "mahdi.abbariki0@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "php" : ">=7.0",
+        "ext-gd": "*"
+    }
+}
