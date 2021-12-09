@@ -38,6 +38,7 @@ class Captcha
     {
         if (is_null($this->code))
             throw new \Exception("there is no code, you should build the image first");
+
         return $this->code;
     }
 
