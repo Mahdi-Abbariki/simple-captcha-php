@@ -31,10 +31,13 @@ class Captcha
             $this->font = $font;
     }
 
+    /**
+     * @throws \Exception
+     */
     public function getFinalCode()
     {
         if (is_null($this->code))
-            throw;
+            throw new \Exception("there is no code, you should build the image first");
         return $this->code;
     }
 
