@@ -2,7 +2,6 @@
 
 namespace MAbbariki\SimpleCaptchaPhp;
 
-use http\Exception;
 
 class Captcha
 {
