@@ -15,6 +15,9 @@ class Captcha
     private $font;
     private $code;
 
+    private $width = 400;
+    private $height;
+
     /**
      * @param int $len
      * @param int $type
@@ -23,9 +26,21 @@ class Captcha
     {
         define('ROOT_PATH', dirname(__DIR__) . '/SimpleCaptchaPhp/');
 
-        $this->length = $len;
-        $this->string = self::getString($type);
+        $this->setLength($len);
+        $this->setString($type);
         $this->setFont(ROOT_PATH . 'resource/fonts/CaptchaFont.ttf');
+    }
+
+    /**
+     * @param $len
+     * @return void
+     * @throws \Exception
+     */
+    public function setLength($len)
+    {
+        if ($len > 10)
+            throw new \Exception("Length must be smaller than 10");
+        $this->length = $len;
     }
 
     /**
@@ -36,6 +51,27 @@ class Captcha
         if (!is_file($font))
             throw new \Exception("Font File can not be found, font : $font");
         $this->font = $font;
+    }
+
+    /**
+     * @param $type
+     * @return void
+     */
+    private function setString($type)
+    {
+        switch ($type) {
+            default:
+            case 1:
+            {
+                $this->string = '0123456789';
+                break;
+            }
+            case 2:
+            {
+                $this->string = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                break;
+            }
+        }
     }
 
     /**
@@ -52,19 +88,25 @@ class Captcha
     /**
      * return base64 of a randomly created image
      */
-    public function buildImage($width = 400, $height = 200)
+    public function buildImage($ratio = 0.5)
     {
+        if ($ratio > 2 || $ratio <= 0)
+            throw new \Exception("Ratio should be between 0 and 2");
+        $this->height = $this->width * $ratio; //set height of picture based on ration
+        $this->setCode(); // set the code used for processing
+        $fontSize = $this->computeFontSize(); // compute font size based on length
+        $fontSizeInPt = $this->computeFontSizePt($fontSize); // compute font size in points
+        $angel = 0; //set the anger of text printed on image
+
+        //start building image
         ob_start();
-        $im = @imagecreate($width, $height)
-        or die("Cannot Initialize new GD image stream");
+        $im = imagecreate($this->width, $this->height);
+        if ($im === false)
+            throw new \Exception("Cannot Initialize new GD image stream");
 
         //color BG
         imagefill($im, 0, 0, imagecolorallocate($im, 223, 230, 233));
 
-
-        $code = $this->getCode();
-        $fontSize = 18;
-        $angel = 0;
         $colors = [
             imagecolorallocate($im, 45, 52, 54),
             imagecolorallocate($im, 111, 30, 81),
@@ -74,77 +116,66 @@ class Captcha
             imagecolorallocate($im, 0, 0, 0)
         ];
 
-        list($x, $y) = $this->findCenter($im, $code, $this->font, $fontSize, $angel);
-        $x -= 50;
-
-        //write The Code
+        // choose color for each object
+        // remove the color from array so the dots and lines won't be same color
         shuffle($colors);
-        $text_color = $colors[0];
-        foreach (str_split($code) as $k => $item) {
-            imagettftext($im, rand(35, 50), $angel, $x, $y, $text_color ?? imagecolorallocate($im, 0, 0, 0), $this->font, $item);
-            $x += 50;
-        }
-
+        $text_color = array_pop($colors) ?? imagecolorallocate($im, 0, 0, 0);
         shuffle($colors);
         $line_color = array_pop($colors);
         shuffle($colors);
         $pixel_color = array_pop($colors);
-        for ($i = 0; $i < rand(5, 10); $i++)
-            imageline($im, 0, rand() % $height, $width, rand() % $height, $line_color);
-        for ($i = 0; $i < rand(500, 1000); $i++)
-            imagesetpixel($im, rand() % $width, rand() % $height, $pixel_color);
 
+        list($x, $y) = $this->findCenter($fontSize, $angel); // find the center of image for text
+
+        //print The Code
+        foreach (str_split($this->code) as $k => $item)
+            imagettftext($im, $fontSizeInPt, $angel, $x + $k * 35, $y, $text_color, $this->font, $item);
+
+
+        for ($i = 0; $i < rand(5, 10); $i++) //print lines
+            imageline($im, 0, rand(1, 1000) % $this->height, $this->width, rand(1, 1000) % $this->height, $line_color);
+
+        for ($i = 0; $i < rand(500, 1000); $i++) // print dots
+            imagesetpixel($im, rand() % $this->width, rand() % $this->height, $pixel_color);
 
         imagepng($im);
         imagedestroy($im);
         $data = ob_get_contents();
         ob_end_clean();
 
-
         return 'data:image/png;base64, ' . base64_encode($data);
     }
 
-    private function getCode(): string
+    private function setCode()
     {
         $shuffle = str_shuffle($this->string);
-        $str = substr($shuffle, 0, $this->length);
-        $this->code = $str;
-        return $str;
+        $this->code = substr($shuffle, 0, $this->length);
     }
 
-    private function findCenter($image, $text, $font, $size, $angel)
+    private function findCenter($size, $angel)
     {
+        $text = implode(" ", str_split($this->code)); // add space between code chars for better sizing
 
-        // find the size of the image
-        $xi = ImageSX($image);
-        $yi = ImageSY($image);
-
-        // find the size of the text
-        $box = ImageTTFBBox($size, $angel, $font, $text);
+        $box = ImageTTFBBox($size, $angel, $this->font, $text); // find the size of the text
 
         $xr = abs(max($box[2], $box[4]));
         $yr = abs(max($box[5], $box[7]));
 
-        // compute centering
-        $x = intval(($xi - $xr) / 2);
-        $y = intval(($yi + $yr) / 2);
+        // compute center
+        $x = intval(($this->width - $xr) / 2);
+        $y = intval(($this->height + $yr) / 2);
 
         return [$x, $y];
     }
 
-    private static function getString($type): string
+    private function computeFontSize()
     {
-        switch ($type) {
-            default:
-            case 1:
-            {
-                return '0123456789';
-            }
-            case 2:
-            {
-                return '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            }
-        }
+        $fontSize = 30;
+        return $fontSize - $this->length;
     }
 
+    private function computeFontSizePt($pixel)
+    {
+        return (3 / 4) * $pixel;
+    }
 }
