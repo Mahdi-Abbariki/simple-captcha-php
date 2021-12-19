@@ -12,7 +12,7 @@ class Captcha
 
     private $length;
     private $string;
-    private $font = 'resource/fonts/CaptchaFont.ttf';
+    private $font;
     private $code;
 
     /**
@@ -21,14 +21,21 @@ class Captcha
      */
     public function __construct(int $len = 4, int $type = self::NUMERIC_CAPTCHA)
     {
+        define('ROOT_PATH', dirname(__DIR__) . '/SimpleCaptchaPhp/');
+
         $this->length = $len;
         $this->string = self::getString($type);
+        $this->setFont(ROOT_PATH . 'resource/fonts/CaptchaFont.ttf');
     }
 
+    /**
+     * @throws \Exception
+     */
     public function setFont($font)
     {
-        if (is_file($font))
-            $this->font = $font;
+        if (!is_file($font))
+            throw new \Exception("Font File can not be found, font : $font");
+        $this->font = $font;
     }
 
     /**
