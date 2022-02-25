@@ -1,2 +1,6 @@
 .idea
 vendor
+.vscode
+src/SimpleCaptchaPhp/test.php
+.history
+*.cache
