@@ -12,26 +12,34 @@ class Captcha
     const SYMBOLIC_CAPTCHA = 3;
 
     private $length;
-    private $string;
+    private $type;
+    private $ratio;
+    private $code;
+
     private $font;
     private $fontSize;
-    private $code;
 
     private $width;
     private $height;
 
+    private $finalImage;
+
     /**
      * @param int $len determine the length of code
      * @param int $type determine that if code should contain only numbers, characters and numbers or  characters, numbers and symbols
+     * @param int $ratio determine ratio of final image
      * @param int $fontSize determine fontSize of written code on image
      */
-    public function __construct(int $len = 4, int $type = self::NUMERIC_CAPTCHA, $fontSize = 30)
+    public function __construct(int $len = 4, int $type = self::NUMERIC_CAPTCHA, $ratio = 0.3, $fontSize = 100)
     {
         $this->setLength($len);
-        $this->setString($type);
-        $this->setFont('./resource/fonts/CaptchaFont.ttf');
+        $this->setType($type);
+        $this->setRatio($ratio);
         $this->setFontSize($fontSize);
-        $this->computeWidth();
+        $this->computeImageDimension();
+        $this->setFont('./resource/fonts/CaptchaFont.ttf');
+
+        $this->setCode(); // set the code used for processing
     }
 
     /**
@@ -66,51 +74,45 @@ class Captcha
         $this->fontSize = $size;
     }
 
-    /**
-     * @param $type
-     * @return void
-     */
-    private function setString($type)
+    public function setType($type)
     {
-        switch ($type) {
-            default:
-            case 1: {
-                    $this->string = '0123456789';
-                    break;
-                }
-            case 2: {
-                    $this->string = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                    break;
-                }
-            case 3: {
-                    $this->string = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%*()+=><?[]{}';
-                    break;
-                }
-        }
+        if (!in_array($type, [self::NUMERIC_CAPTCHA, self::ALPHANUMERIC_CAPTCHA, self::SYMBOLIC_CAPTCHA]))
+            throw new \Exception("Provided Type is not right");
+        $this->type = $type;
     }
 
-    /**
-     * @throws \Exception
-     */
+    public function setRatio($ratio)
+    {
+        if ($ratio > 2 || $ratio < 0.3)
+            throw new \Exception("Ratio should be between 0.3 and 2");
+
+        $this->ratio = $ratio;
+    }
+
     public function getFinalCode()
     {
-        if (is_null($this->code))
-            throw new \Exception("there is no code, you should build the image first");
-
         return $this->code;
+    }
+
+    public function getImage()
+    {
+        if (!$this->finalImage)
+            $this->finalImage = $this->buildImage();
+        return $this->finalImage;
+    }
+
+    public function reproduceImage()
+    {
+        $this->finalImage = $this->buildImage();
+        return $this->finalImage;
     }
 
     /**
      * @return String base64 of a randomly created image
      */
-    public function buildImage($ratio = 0.5)
+    private function buildImage()
     {
-        if ($ratio > 2 || $ratio < 0.3)
-            throw new \Exception("Ratio should be between 0.3 and 2");
-        $this->height = $this->width * $ratio; //set height of picture based on ratio
-        $this->setCode(); // set the code used for processing
         $fontSizeInPt = $this->pixelToPt($this->fontSize); // compute font size in points
-        $angel = 0; //set the angel of text printed on image
 
         //start building image
         ob_start();
@@ -133,26 +135,31 @@ class Captcha
         // choose color for each object
         // remove the color from array so the dots and lines won't be same color
         shuffle($colors);
-        $text_color = array_pop($colors) ?? imagecolorallocate($im, 0, 0, 0);
+        $text_color = array_pop($colors);
         shuffle($colors);
         $line_color = array_pop($colors);
         shuffle($colors);
         $pixel_color = array_pop($colors);
 
-        list($x, $y) = $this->findCenter($fontSizeInPt, $angel); // find the center of image for text
+        list($x, $y) = $this->findCenter($fontSizeInPt, 0); // find the center of image for printing code
 
         //print The Code
-        foreach (str_split($this->code) as $k => $item) {
-            $verticalVariable = rand(((-$this->height) / 2) + ($this->height * 0.3), $this->height / 2 - ($this->height * 0.3));
-            $horizontalVariable = ($k * rand(30, 35));
-            imagettftext($im, $fontSizeInPt, rand(0, 45), $x + $horizontalVariable, $y + $verticalVariable, $text_color, $this->font, $item);
-        }
+        $angel = rand(0, 45);
+        if ($this->type == self::SYMBOLIC_CAPTCHA)
+            $angel = 0; // disable text rotation, to prevent + become * and sth like this 
+        if ($this->type)
+            foreach (str_split($this->code) as $k => $item) {
+                $verticalVariable = rand(((-$this->height) / 2) + ($this->height * 0.3), $this->height / 2 - ($this->height * 0.3));
+                $horizontalVariable = ($k * max($this->width * 0.05, $this->fontSize));
+
+                imagettftext($im, $fontSizeInPt, $angel, $x + $horizontalVariable, $y + $verticalVariable, $text_color, $this->font, $item);
+            }
 
 
-        for ($i = 0; $i < rand(5, 10); $i++) //print lines
+        for ($i = 0; $i < rand(5, 10); $i++) //draw lines
             imageline($im, 0, rand(1, 1000) % $this->height, $this->width, rand(1, 1000) % $this->height, $line_color);
 
-        for ($i = 0; $i < rand(500, 1000); $i++) // print dots
+        for ($i = 0; $i < rand(500, 1000); $i++) // draw dots
             imagesetpixel($im, rand() % $this->width, rand() % $this->height, $pixel_color);
 
         imagepng($im);
@@ -163,16 +170,49 @@ class Captcha
         return 'data:image/png;base64, ' . base64_encode($data);
     }
 
-    private function computeWidth()
+    private function computeImageDimension()
     {
+        $basedOnFontSize = 0;
+        if ($this->fontSize >= 70)
+            $basedOnFontSize = $this->fontSize * 10;
+
+        elseif ($this->fontSize >= 50)
+            $basedOnFontSize = $this->fontSize * 5;
+
+        else
+            $basedOnFontSize = $this->fontSize * 3;
+
+
+
         //400 (optimal width for 10 char code in tests) / 10 (max code len) = 40
-        $this->width = 40 * $this->length;
+        $this->width = 40 * $this->length + $basedOnFontSize;
+
+        $this->height = $this->width * $this->ratio; //set height of picture based on ratio
     }
 
     private function setCode()
     {
-        $shuffle = str_shuffle($this->string);
+        $shuffle = str_shuffle($this->getString());
         $this->code = substr($shuffle, 0, $this->length);
+    }
+
+    /**
+     * @return String
+     */
+    private function getString()
+    {
+        switch ($this->type) {
+            default:
+            case 1: {
+                    return '0123456789';
+                }
+            case 2: {
+                    return '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                }
+            case 3: {
+                    return '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%*()+=?[]{}';
+                }
+        }
     }
 
     private function findCenter($size, $angel)
