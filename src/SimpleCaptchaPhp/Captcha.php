@@ -30,7 +30,7 @@ class Captcha
      * @param int $ratio determine ratio of final image
      * @param int $fontSize determine fontSize of written code on image
      */
-    public function __construct(int $len = 4, int $type = self::NUMERIC_CAPTCHA, $ratio = 0.3, $fontSize = 100)
+    public function __construct(int $len = 4, int $type = self::NUMERIC_CAPTCHA, $ratio = 0.3, $fontSize = 30)
     {
         $this->setLength($len);
         $this->setType($type);
@@ -113,7 +113,6 @@ class Captcha
     private function buildImage()
     {
         $fontSizeInPt = $this->pixelToPt($this->fontSize); // compute font size in points
-
         //start building image
         ob_start();
         $im = imagecreate($this->width, $this->height);
@@ -147,10 +146,14 @@ class Captcha
         $angel = rand(0, 45);
         if ($this->type == self::SYMBOLIC_CAPTCHA)
             $angel = 0; // disable text rotation, to prevent + become * and sth like this 
+        $charMarginMax = max($this->width * 0.1, $this->fontSize);
+        $charMarginMin = max($this->width * 0.08, $this->fontSize);
+        $x += (rand(0,1) >= 0.5) ? rand($charMarginMin, $charMarginMax) - 20 : -1 * rand($charMarginMin, $charMarginMax) + 20;
         if ($this->type)
             foreach (str_split($this->code) as $k => $item) {
                 $verticalVariable = rand(((-$this->height) / 2) + ($this->height * 0.3), $this->height / 2 - ($this->height * 0.3));
-                $horizontalVariable = ($k * max($this->width * 0.05, $this->fontSize));
+
+                $horizontalVariable = ($k * rand($charMarginMin, $charMarginMax));
 
                 imagettftext($im, $fontSizeInPt, $angel, $x + $horizontalVariable, $y + $verticalVariable, $text_color, $this->font, $item);
             }
@@ -174,7 +177,7 @@ class Captcha
     {
         $basedOnFontSize = 0;
         if ($this->fontSize >= 70)
-            $basedOnFontSize = $this->fontSize * 10;
+            $basedOnFontSize = $this->fontSize * 6;
 
         elseif ($this->fontSize >= 50)
             $basedOnFontSize = $this->fontSize * 5;
@@ -185,9 +188,9 @@ class Captcha
 
 
         //400 (optimal width for 10 char code in tests) / 10 (max code len) = 40
-        $this->width = 40 * $this->length + $basedOnFontSize;
+        $this->width = 30 * $this->length + $basedOnFontSize;
 
-        $this->height = $this->width * $this->ratio; //set height of picture based on ratio
+        $this->height = intval($this->width * $this->ratio); //set height of picture based on ratio
     }
 
     private function setCode()
@@ -217,9 +220,7 @@ class Captcha
 
     private function findCenter($size, $angel)
     {
-        $text = implode(" ", str_split($this->code)); // add space between code chars for better sizing
-
-        $box = ImageTTFBBox($size, $angel, $this->font, $text); // find the size of the text
+        $box = ImageTTFBBox($size, $angel, $this->font, $this->code); // find the size of the text
 
         $xr = abs(max($box[2], $box[4]));
         $yr = abs(max($box[5], $box[7]));
